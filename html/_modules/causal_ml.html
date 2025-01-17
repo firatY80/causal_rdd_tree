@@ -1,0 +1,631 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>causal_ml &mdash; Heterogeneous Treatment Effects 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=8d563738"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Heterogeneous Treatment Effects
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../causal_ml.html">causal_ml module</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Heterogeneous Treatment Effects</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Module code</a></li>
+      <li class="breadcrumb-item active">causal_ml</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for causal_ml</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">This module only contains one class (CausalTree). It builds a causal tree based </span>
+<span class="sd">on Reguly (2021). Treatment effects are local treatment effects based on a </span>
+<span class="sd">regression discontinuity estimation within the leaves of the tree.</span>
+
+<span class="sd">Usage Steps:</span>
+<span class="sd">------------</span>
+
+<span class="sd">1. Download the ``causal_ml`` module into your working directory.</span>
+<span class="sd">2. Split your data into training and estimation samples.</span>
+<span class="sd">3. Create a ``CausalTree`` object.</span>
+<span class="sd">4. Grow the tree (both training and estimation samples are used in the process).</span>
+<span class="sd">5. Prune the tree.</span>
+<span class="sd">6. Estimate unbiased treatment effects with the estimation split.</span>
+<span class="sd">7. Print the tree and return the leaf information.</span>
+
+<span class="sd">Example:</span>
+<span class="sd">--------</span>
+
+<span class="sd">Your main script may look like this:</span>
+
+<span class="sd">.. code-block:: python</span>
+
+<span class="sd">    import pandas as pd</span>
+<span class="sd">    from causal_ml import CausalTree</span>
+<span class="sd">    from sklearn.model_selection import train_test_split</span>
+
+<span class="sd">    # Load data</span>
+<span class="sd">    data = pd.read_csv(&#39;your_path_to_the_data&#39;)</span>
+
+<span class="sd">    # Split data into training and estimation sets</span>
+<span class="sd">    d_train, d_est = train_test_split(data, test_size=0.5, random_state=42)</span>
+
+<span class="sd">    # Initialize CausalTree</span>
+<span class="sd">    tree = CausalTree(split_steps=20, max_depth=4, min_leaf_size=100)</span>
+
+<span class="sd">    # Grow the tree</span>
+<span class="sd">    tree.grow_tree(d_train, d_est, &#39;wage&#39;, &#39;time&#39;, {&#39;age&#39;: &#39;continuous&#39;, &#39;education&#39;: &#39;discrete&#39;})</span>
+
+<span class="sd">    # Prune the tree</span>
+<span class="sd">    pruned_tree = tree.prune_tree(d_train, d_est, 3)</span>
+
+<span class="sd">    # Estimate treatment effects</span>
+<span class="sd">    pruned_tree.estimate_tree(d_est)</span>
+
+<span class="sd">    # Print tree and retrieve leaf information</span>
+<span class="sd">    leaves = pruned_tree.print_tree()</span>
+<span class="sd">    </span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.linear_model</span><span class="w"> </span><span class="kn">import</span> <span class="n">LinearRegression</span>
+
+<div class="viewcode-block" id="CausalTree">
+<a class="viewcode-back" href="../causal_ml.html#causal_ml.CausalTree">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">CausalTree</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A class for building and pruning regression trees for heterogeneous treatment effects</span>
+
+<span class="sd">    Treatment effects are estimated through Regression Discontinuity Design (RDD).</span>
+<span class="sd">    See Reguly (2021) &#39;Heterogeneous Treatment Effects in Regression Discontinuity Design&#39;</span>
+
+<span class="sd">    :ivar depth: The depth of this node from the source node</span>
+<span class="sd">    :ivar max_depth: The maximum permissible depth of the tree</span>
+<span class="sd">    :ivar is_leaf: Whether the node is a leaf</span>
+<span class="sd">    :ivar left: The node branching to the left</span>
+<span class="sd">    :ivar right: The node branching to the right</span>
+<span class="sd">    :ivar tau: The treatment effect in this node, estimated during training</span>
+<span class="sd">    :ivar tau_est: The treatment effect in this node, estimated on estimation sample</span>
+<span class="sd">    :ivar v: Variance of tau_est</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">max_depth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">split_steps</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">min_leaf_size</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> 
+                 <span class="n">tol</span><span class="o">=</span><span class="mf">0.005</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.0</span><span class="p">):</span>
+
+        <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">max_depth</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">split_steps</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> 
+            <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">min_leaf_size</span><span class="p">,</span> <span class="nb">int</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;max_depth, split_steps, and min_leaf_size must be integers.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">alpha</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">))</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tol</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;tol and alpha must be of type int or float.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">((</span><span class="n">tol</span><span class="o">&gt;=</span><span class="mf">0.0</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">alpha</span><span class="o">&gt;=</span><span class="mf">0.0</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;tol and alpha must be non-negative.&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">depth</span> <span class="o">=</span> <span class="n">depth</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tol</span> <span class="o">=</span> <span class="n">tol</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">split_steps</span> <span class="o">=</span> <span class="n">split_steps</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_depth</span> <span class="o">=</span> <span class="n">max_depth</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">min_leaf_size</span> <span class="o">=</span> <span class="n">min_leaf_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">=</span> <span class="n">alpha</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">too_few_samples</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1"># too few samples to run RDD</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">is_leaf</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">left</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">right</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># The information gain obtained by splitting this node</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">delta_error</span> <span class="o">=</span> <span class="mf">0.0</span> 
+
+        <span class="c1"># Attributes set during tree growth</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tau</span> <span class="o">=</span> <span class="mf">0.0</span>  <span class="c1"># Treatment effect </span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">v</span> <span class="o">=</span> <span class="mf">0.0</span>  <span class="c1"># Variance of treatment effect</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">emse</span> <span class="o">=</span> <span class="mf">0.0</span>  <span class="c1"># information value of this node</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">split_var</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># spacing for candidates on splitting variable, list</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">step_size</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="c1"># lower bounds of splitting variables, list</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">s_min</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># upper bounds of splitting variables, list</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">s_max</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="CausalTree.grow_tree">
+<a class="viewcode-back" href="../causal_ml.html#causal_ml.CausalTree.grow_tree">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">grow_tree</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">train_data</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">est_data</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">dep_var</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">run_var</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> 
+                  <span class="n">split_var</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">indep_var</span><span class="p">:</span> <span class="nb">list</span><span class="o">=</span><span class="p">[],</span> <span class="n">poly</span><span class="p">:</span> <span class="nb">int</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">:</span> <span class="nb">float</span><span class="o">=</span><span class="mf">0.0</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Grows the full tree</span>
+
+<span class="sd">        Recursively splits the training sample until the maximum tree depth is reached, </span>
+<span class="sd">        or until there are no further information gains from growing the tree deeper </span>
+
+<span class="sd">        :param train_data: The training sample</span>
+<span class="sd">        :type train_data: pandas.DataFrame</span>
+<span class="sd">        :param est_data: The estimation sample</span>
+<span class="sd">        :type est_data: pandas.DataFrame</span>
+<span class="sd">        :param dep_var: Name of the dependent variable</span>
+<span class="sd">        :type dep_var: str</span>
+<span class="sd">        :param run_var: Name of the running variable</span>
+<span class="sd">        :type run_var: str</span>
+<span class="sd">        :param split_var: Names of the splitting variables</span>
+<span class="sd">        :type split_var: dict</span>
+<span class="sd">        :param indep_var: Names of the independent variables, defaults to []</span>
+<span class="sd">        :type indep_var: list, optional</span>
+<span class="sd">        :param poly: Polynomial order for running variable, defaults to 1</span>
+<span class="sd">        :type poly: int, optional</span>
+<span class="sd">        :param cutoff: Cutoff value for running variable, defaults to 0</span>
+<span class="sd">        :type cutoff: int, optional</span>
+
+<span class="sd">        &gt;&gt;&gt; my_tree.grow_tree(data_training, data_estimation, dep_var=&#39;wage&#39;, run_var=&#39;time&#39;, </span>
+<span class="sd">                            split_var={&#39;age&#39;:&#39;continuous&#39;, &#39;education&#39;=&#39;discrete&#39;})</span>
+
+<span class="sd">        .. note::</span>
+<span class="sd">           For **run_var**, pass each variable as a key-value pair where </span>
+<span class="sd">           key is the variable name (str) and value is </span>
+<span class="sd">           either &#39;discrete&#39; or &#39;continuous&#39; (str).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="c1"># check that all inputs are in order</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_inputs</span><span class="p">(</span><span class="n">train_data</span><span class="p">,</span> <span class="n">est_data</span><span class="p">,</span> <span class="n">dep_var</span><span class="p">,</span> <span class="n">run_var</span><span class="p">,</span> 
+                              <span class="n">split_var</span><span class="p">,</span> <span class="n">indep_var</span><span class="p">,</span> <span class="n">poly</span><span class="p">)</span>
+        
+        <span class="c1"># drop redundant features, center running variable, and create </span>
+        <span class="c1"># polynomial terms if needed</span>
+        <span class="n">train_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prep_data</span><span class="p">(</span><span class="n">train_data</span><span class="p">,</span> <span class="n">dep_var</span><span class="p">,</span> <span class="n">run_var</span><span class="p">,</span> <span class="n">split_var</span><span class="p">,</span> 
+                                     <span class="n">indep_var</span><span class="p">,</span> <span class="n">poly</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">)</span>
+        <span class="n">est_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prep_data</span><span class="p">(</span><span class="n">est_data</span><span class="p">,</span> <span class="n">dep_var</span><span class="p">,</span> <span class="n">run_var</span><span class="p">,</span> <span class="n">split_var</span><span class="p">,</span> 
+                                   <span class="n">indep_var</span><span class="p">,</span> <span class="n">poly</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">)</span>
+        
+        <span class="c1"># initialise some tree attributes and obtain emse for this node</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_initialise_tree</span><span class="p">(</span><span class="n">train_data</span><span class="p">,</span> <span class="n">est_data</span><span class="p">,</span> <span class="n">dep_var</span><span class="p">,</span> <span class="n">run_var</span><span class="p">,</span> 
+                              <span class="n">split_var</span><span class="p">,</span> <span class="n">indep_var</span><span class="p">,</span> <span class="n">poly</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">)</span>
+        
+        <span class="c1"># grow the tree by recursively splitting training and estimation </span>
+        <span class="c1"># data</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_recursive_split</span><span class="p">(</span><span class="n">train_data</span><span class="p">,</span> <span class="n">est_data</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">step_size</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_inputs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">train_data</span><span class="p">,</span> <span class="n">est_data</span><span class="p">,</span> <span class="n">dep_var</span><span class="p">,</span> <span class="n">run_var</span><span class="p">,</span> 
+                         <span class="n">split_var</span><span class="p">,</span> <span class="n">indep_var</span><span class="p">,</span> <span class="n">poly</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">train_data</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">est_data</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;train_data and est_data must be pandas DataFrames.&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">var</span> <span class="ow">in</span> <span class="p">([</span><span class="n">dep_var</span><span class="p">,</span> <span class="n">run_var</span><span class="p">]</span> <span class="o">+</span> <span class="nb">list</span><span class="p">(</span><span class="n">split_var</span><span class="p">)</span> <span class="o">+</span> <span class="nb">list</span><span class="p">(</span><span class="n">indep_var</span><span class="p">)):</span>
+            <span class="k">if</span> <span class="n">var</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">train_data</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&#39;</span><span class="si">{</span><span class="n">var</span><span class="si">}</span><span class="s2">&#39; not found in training data features.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">list</span><span class="p">(</span><span class="n">train_data</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">list</span><span class="p">(</span><span class="n">est_data</span><span class="o">.</span><span class="n">columns</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Training and estimation data must have the same features.&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">poly</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="n">poly</span><span class="o">&lt;</span><span class="mi">1</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;poly needs to be a positive integer.&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_prep_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">dep_var</span><span class="p">,</span> <span class="n">run_var</span><span class="p">,</span> <span class="n">split_var</span><span class="p">,</span> <span class="n">indep_var</span><span class="p">,</span> <span class="n">poly</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">):</span>
+    
+        <span class="c1"># filter out any unused data </span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="p">[[</span><span class="n">dep_var</span><span class="p">,</span> <span class="n">run_var</span><span class="p">]</span> <span class="o">+</span> <span class="nb">list</span><span class="p">(</span><span class="n">split_var</span><span class="p">)</span> <span class="o">+</span> <span class="nb">list</span><span class="p">(</span><span class="n">indep_var</span><span class="p">)]</span>
+        
+        <span class="c1"># center running variable at cutoff zero</span>
+        <span class="n">data</span><span class="o">.</span><span class="n">loc</span><span class="p">[:,</span><span class="n">run_var</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="n">run_var</span><span class="p">]</span><span class="o">-</span><span class="n">cutoff</span>
+
+        <span class="c1"># add polynomial terms for running variable to the data</span>
+        <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">poly</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="n">data</span><span class="p">[</span><span class="n">run_var</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">)]</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="n">run_var</span><span class="p">]</span><span class="o">**</span><span class="n">x</span>
+        
+        <span class="k">return</span> <span class="n">data</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_initialise_tree</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">train_data</span><span class="p">,</span> <span class="n">est_data</span><span class="p">,</span> <span class="n">dep_var</span><span class="p">,</span> <span class="n">run_var</span><span class="p">,</span> <span class="n">split_var</span><span class="p">,</span> <span class="n">indep_var</span><span class="p">,</span> <span class="n">poly</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">poly</span> <span class="o">=</span> <span class="n">poly</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span> <span class="o">=</span> <span class="n">cutoff</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">indep_var</span> <span class="o">=</span> <span class="n">indep_var</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">split_var</span> <span class="o">=</span> <span class="n">split_var</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">split_var_names</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">split_var</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dep_var</span> <span class="o">=</span> <span class="n">dep_var</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">run_var</span> <span class="o">=</span> <span class="n">run_var</span>
+        
+        <span class="c1"># lower bounds of splitting variables</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">s_min</span> <span class="o">=</span> <span class="n">train_data</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">split_var_names</span><span class="p">]</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
+        <span class="c1"># upper bounds of splitting variables</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">s_max</span> <span class="o">=</span> <span class="n">train_data</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">split_var_names</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_train</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">train_data</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_est</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">est_data</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_treated</span> <span class="o">=</span> <span class="p">(</span><span class="n">train_data</span><span class="p">[</span><span class="n">run_var</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mf">0.0</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_control</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_train</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_treated</span>
+
+        <span class="c1"># too few observations to run regression</span>
+        <span class="k">if</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_treated</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_control</span><span class="p">)</span> <span class="o">&lt;</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">min_leaf_size</span> <span class="o">//</span> <span class="mi">2</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">too_few_samples</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">return</span>
+        
+        <span class="c1"># get spacing between split candidate values</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">depth</span><span class="o">==</span><span class="mi">0</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">step_size</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">s_max</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">s_min</span><span class="p">)</span><span class="o">/</span><span class="bp">self</span><span class="o">.</span><span class="n">split_steps</span>
+
+        <span class="c1"># Compute information value (expected MSE) of this node. </span>
+        <span class="c1"># This is EMSE in Reguly paper</span>
+        <span class="n">p_plus</span><span class="p">,</span> <span class="n">p_minus</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_p</span><span class="p">(</span><span class="n">est_data</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tau</span><span class="p">,</span> <span class="n">sigma_plus</span><span class="p">,</span> <span class="n">sigma_minus</span><span class="p">,</span> <span class="n">m_plus</span><span class="p">,</span> <span class="n">m_minus</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_sigma</span><span class="p">(</span><span class="n">train_data</span><span class="p">)</span>
+        <span class="n">v_plus</span> <span class="o">=</span> <span class="n">sigma_plus</span><span class="o">*</span><span class="n">m_plus</span> <span class="o">/</span> <span class="n">p_plus</span>
+        <span class="n">v_minus</span> <span class="o">=</span> <span class="n">sigma_minus</span><span class="o">*</span><span class="n">m_minus</span> <span class="o">/</span> <span class="n">p_minus</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">v</span> <span class="o">=</span> <span class="n">v_plus</span> <span class="o">+</span> <span class="n">v_minus</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">emse</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">v</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_train</span> <span class="o">+</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_est</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">emse</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">emse</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">tau</span><span class="o">**</span><span class="mi">2</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_recursive_split</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">train_data</span><span class="p">,</span> <span class="n">est_data</span><span class="p">,</span> <span class="n">step_size</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_depth</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">depth</span><span class="p">:</span>
+            <span class="c1"># Tree has already reached its maximum depth</span>
+            <span class="k">return</span>
+        
+        <span class="n">best_emse</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">emse</span>
+        <span class="n">best_split</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># loop over the splitting variables</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">split_var</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+
+            <span class="c1"># get the splitting value candidates</span>
+            <span class="k">if</span> <span class="n">val</span><span class="o">==</span><span class="s1">&#39;continuous&#39;</span><span class="p">:</span>
+                <span class="n">split_candidates</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">s_min</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">s_max</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="n">step_size</span><span class="p">[</span><span class="n">key</span><span class="p">])[</span><span class="mi">1</span><span class="p">:]</span>
+            <span class="k">elif</span> <span class="n">val</span><span class="o">==</span><span class="s1">&#39;discrete&#39;</span><span class="p">:</span>
+                <span class="n">unique_values</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">train_data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">())</span>
+                <span class="n">split_candidates</span> <span class="o">=</span> <span class="n">unique_values</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Splitting variable needs to tagged as continous or as discrete&#39;</span><span class="p">)</span>
+            
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">split_candidates</span><span class="p">)</span><span class="o">==</span><span class="mi">0</span><span class="p">:</span> <span class="k">continue</span>
+
+            <span class="c1"># loop over splitting candidates</span>
+            <span class="k">for</span> <span class="n">split_val</span> <span class="ow">in</span> <span class="n">split_candidates</span><span class="p">:</span>
+                <span class="n">d_left_tr</span> <span class="o">=</span> <span class="n">train_data</span><span class="p">[</span><span class="n">train_data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">split_val</span><span class="p">]</span>
+                <span class="n">d_right_tr</span> <span class="o">=</span> <span class="n">train_data</span><span class="p">[</span><span class="n">train_data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">split_val</span><span class="p">]</span>
+                <span class="n">d_left_est</span> <span class="o">=</span> <span class="n">est_data</span><span class="p">[</span><span class="n">est_data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">split_val</span><span class="p">]</span>
+                <span class="n">d_right_est</span> <span class="o">=</span> <span class="n">est_data</span><span class="p">[</span><span class="n">est_data</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">split_val</span><span class="p">]</span>
+
+                <span class="c1"># Too few samples in candidate leaf, try the next split candidate</span>
+                <span class="k">if</span> <span class="nb">min</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">d_left_tr</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">d_right_tr</span><span class="p">))</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">min_leaf_size</span><span class="p">:</span>
+                    <span class="k">continue</span>
+
+                <span class="c1"># split into left and right</span>
+                <span class="n">treeLeft</span> <span class="o">=</span> <span class="n">CausalTree</span><span class="p">(</span><span class="n">depth</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">depth</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="n">max_depth</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_depth</span><span class="p">,</span> 
+                                      <span class="n">tol</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tol</span><span class="p">,</span> <span class="n">split_steps</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">split_steps</span><span class="p">)</span>
+                <span class="n">treeRight</span> <span class="o">=</span> <span class="n">CausalTree</span><span class="p">(</span><span class="n">depth</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">depth</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="n">max_depth</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_depth</span><span class="p">,</span> 
+                                       <span class="n">tol</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tol</span><span class="p">,</span> <span class="n">split_steps</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">split_steps</span><span class="p">)</span>
+                <span class="n">treeLeft</span><span class="o">.</span><span class="n">_initialise_tree</span><span class="p">(</span><span class="n">d_left_tr</span><span class="p">,</span> <span class="n">d_left_est</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dep_var</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">run_var</span><span class="p">,</span> 
+                                          <span class="bp">self</span><span class="o">.</span><span class="n">split_var</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">indep_var</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">poly</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="p">)</span>
+                <span class="n">treeRight</span><span class="o">.</span><span class="n">_initialise_tree</span><span class="p">(</span><span class="n">d_right_tr</span><span class="p">,</span> <span class="n">d_right_est</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dep_var</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">run_var</span><span class="p">,</span> 
+                                           <span class="bp">self</span><span class="o">.</span><span class="n">split_var</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">indep_var</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">poly</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="p">)</span>
+
+                <span class="c1"># Too few control or treatment samples in candidate leaves, </span>
+                <span class="c1"># try the next split candidate</span>
+                <span class="k">if</span> <span class="n">treeLeft</span><span class="o">.</span><span class="n">too_few_samples</span> <span class="ow">or</span> <span class="n">treeRight</span><span class="o">.</span><span class="n">too_few_samples</span><span class="p">:</span>
+                    <span class="k">continue</span>
+
+                <span class="n">tauLeft</span> <span class="o">=</span> <span class="p">(</span><span class="n">treeLeft</span><span class="o">.</span><span class="n">tau</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span><span class="o">*</span><span class="p">(</span><span class="n">treeLeft</span><span class="o">.</span><span class="n">n_train</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_train</span><span class="p">)</span>
+                <span class="n">tauRight</span> <span class="o">=</span> <span class="p">(</span><span class="n">treeRight</span><span class="o">.</span><span class="n">tau</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span><span class="o">*</span><span class="p">(</span><span class="n">treeRight</span><span class="o">.</span><span class="n">n_train</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_train</span><span class="p">)</span>
+                <span class="n">varLeaf</span> <span class="o">=</span> <span class="p">(</span><span class="n">treeLeft</span><span class="o">.</span><span class="n">v</span> <span class="o">+</span> <span class="n">treeRight</span><span class="o">.</span><span class="n">v</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_train</span> <span class="o">+</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_est</span><span class="p">)</span>
+                <span class="c1"># expected emse over the new two leaves</span>
+                <span class="n">emse_split</span> <span class="o">=</span> <span class="n">varLeaf</span> <span class="o">-</span> <span class="n">tauRight</span> <span class="o">-</span> <span class="n">tauLeft</span>
+
+                <span class="c1"># is this the best splitting candidate?</span>
+                <span class="k">if</span> <span class="n">emse_split</span> <span class="o">&lt;</span> <span class="n">best_emse</span><span class="p">:</span>
+                    <span class="n">data_left_tr</span> <span class="o">=</span> <span class="n">d_left_tr</span> 
+                    <span class="n">data_right_tr</span> <span class="o">=</span> <span class="n">d_right_tr</span>
+                    <span class="n">data_left_est</span> <span class="o">=</span> <span class="n">d_left_est</span>
+                    <span class="n">data_right_est</span> <span class="o">=</span> <span class="n">d_right_est</span>
+                    <span class="n">best_split</span> <span class="o">=</span> <span class="p">(</span><span class="n">treeLeft</span><span class="p">,</span> <span class="n">treeRight</span><span class="p">,</span> <span class="n">split_val</span><span class="p">)</span>
+                    <span class="n">best_emse</span> <span class="o">=</span> <span class="n">emse_split</span>
+
+            <span class="c1"># if the best splitting candidate improves the current node EMSE, </span>
+            <span class="c1"># then perform split</span>
+            <span class="k">if</span> <span class="n">best_split</span> <span class="ow">and</span> <span class="p">(</span><span class="n">best_emse</span><span class="o">+</span><span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">)</span> <span class="o">&lt;</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">emse</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">tol</span><span class="o">*</span><span class="nb">abs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">emse</span><span class="p">)):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">is_leaf</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="c1"># information gain of splitting</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">delta_error</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">emse</span> <span class="o">-</span> <span class="n">best_emse</span> 
+                <span class="bp">self</span><span class="o">.</span><span class="n">left</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">right</span><span class="p">,</span> <span class="n">split_val</span> <span class="o">=</span> <span class="n">best_split</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">left</span><span class="o">.</span><span class="n">_recursive_split</span><span class="p">(</span><span class="n">data_left_tr</span><span class="p">,</span> <span class="n">data_left_est</span><span class="p">,</span> <span class="n">step_size</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">right</span><span class="o">.</span><span class="n">_recursive_split</span><span class="p">(</span><span class="n">data_right_tr</span><span class="p">,</span> <span class="n">data_right_est</span><span class="p">,</span> <span class="n">step_size</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_sigma</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+        <span class="c1"># Helper function to compute some of the components to compute EMSE</span>
+
+        <span class="n">y</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">dep_var</span><span class="p">]</span><span class="o">.</span><span class="n">values</span>
+        <span class="n">vars_to_drop</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">dep_var</span><span class="p">]</span> <span class="o">+</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">split_var_names</span><span class="p">)</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span> <span class="o">=</span> <span class="n">vars_to_drop</span><span class="p">)</span><span class="o">.</span><span class="n">values</span>
+        <span class="n">k</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>  <span class="c1"># number of independent vars in regression</span>
+        <span class="n">treated</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">run_var</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mf">0.0</span>
+
+        <span class="n">n_total</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">treated</span><span class="p">)</span>
+        <span class="n">n_treated</span> <span class="o">=</span> <span class="n">treated</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="n">n_control</span> <span class="o">=</span> <span class="n">n_total</span><span class="o">-</span><span class="n">n_treated</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">too_few_samples</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Warning: There are few control or treatment samples to run the RDD regression.&quot;</span><span class="p">)</span>
+        <span class="n">yt</span> <span class="o">=</span> <span class="n">y</span><span class="p">[</span><span class="n">treated</span><span class="p">]</span>   <span class="c1"># y vector for treated observations</span>
+        <span class="n">yc</span> <span class="o">=</span> <span class="n">y</span><span class="p">[</span><span class="o">~</span><span class="n">treated</span><span class="p">]</span>  <span class="c1"># y vector for control observations</span>
+        <span class="n">xt</span> <span class="o">=</span> <span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="n">treated</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="n">k</span><span class="p">)</span>
+        <span class="n">xc</span> <span class="o">=</span> <span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="o">~</span><span class="n">treated</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="n">k</span><span class="p">)</span>
+        <span class="n">rdd_model</span> <span class="o">=</span> <span class="n">LinearRegression</span><span class="p">()</span>
+
+        <span class="n">rdd_model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">xt</span><span class="p">,</span> <span class="n">yt</span><span class="p">)</span> 
+        <span class="n">alpha_t</span> <span class="o">=</span> <span class="n">rdd_model</span><span class="o">.</span><span class="n">intercept_</span>
+        <span class="n">yhat</span> <span class="o">=</span> <span class="n">rdd_model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">xt</span><span class="p">)</span>
+        <span class="n">res</span> <span class="o">=</span> <span class="p">(</span><span class="n">yt</span> <span class="o">-</span> <span class="n">yhat</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span>
+        <span class="n">sigma_plus</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">/</span> <span class="p">(</span><span class="n">n_treated</span> <span class="o">-</span> <span class="n">k</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">rdd_model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">xc</span><span class="p">,</span> <span class="n">yc</span><span class="p">)</span> 
+        <span class="n">alpha_c</span> <span class="o">=</span> <span class="n">rdd_model</span><span class="o">.</span><span class="n">intercept_</span>
+
+        <span class="c1"># The treatment effect (difference of the intercepts)</span>
+        <span class="n">tau</span> <span class="o">=</span> <span class="n">alpha_t</span><span class="o">-</span><span class="n">alpha_c</span>
+
+        <span class="n">yhat</span> <span class="o">=</span> <span class="n">rdd_model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">xc</span><span class="p">)</span>
+        <span class="n">res</span> <span class="o">=</span> <span class="p">(</span><span class="n">yc</span> <span class="o">-</span> <span class="n">yhat</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span>
+        <span class="n">sigma_minus</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">/</span> <span class="p">(</span><span class="n">n_control</span> <span class="o">-</span> <span class="n">k</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">m01</span> <span class="o">=</span> <span class="n">xt</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="n">m11</span> <span class="o">=</span> <span class="p">(</span><span class="n">xt</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="n">m_plus</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="n">n_treated</span><span class="p">,</span> <span class="n">m01</span><span class="p">],[</span><span class="n">m01</span><span class="p">,</span> <span class="n">m11</span><span class="p">]])</span>
+        <span class="n">m_plus</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">m_plus</span><span class="p">)</span>
+
+        <span class="n">m01</span> <span class="o">=</span> <span class="n">xc</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="n">m11</span> <span class="o">=</span> <span class="p">(</span><span class="n">xc</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="n">m_minus</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="n">n_control</span><span class="p">,</span> <span class="n">m01</span><span class="p">],[</span><span class="n">m01</span><span class="p">,</span> <span class="n">m11</span><span class="p">]])</span>
+        <span class="n">m_minus</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">m_minus</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">tau</span><span class="p">,</span> <span class="n">sigma_plus</span><span class="p">,</span> <span class="n">sigma_minus</span><span class="p">,</span> <span class="n">m_plus</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">],</span> <span class="n">m_minus</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_p</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+        <span class="c1"># Helper function to get the treatment and control shares </span>
+        <span class="c1"># in the estimation sample</span>
+        <span class="n">lower_bounds</span> <span class="o">=</span> <span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">split_var_names</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">s_min</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">upper_bounds</span> <span class="o">=</span> <span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">split_var_names</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">s_max</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">p_plus</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">[(</span><span class="n">data</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">run_var</span><span class="p">]</span><span class="o">&gt;=</span><span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">lower_bounds</span> <span class="o">&amp;</span> <span class="n">upper_bounds</span><span class="p">])</span> 
+        <span class="n">p_minus</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">[(</span><span class="n">data</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">run_var</span><span class="p">]</span><span class="o">&lt;</span><span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">lower_bounds</span> <span class="o">&amp;</span> <span class="n">upper_bounds</span><span class="p">])</span>
+        <span class="n">p_total</span> <span class="o">=</span> <span class="n">p_plus</span><span class="o">+</span><span class="n">p_minus</span>
+        <span class="k">return</span> <span class="n">p_plus</span> <span class="o">/</span> <span class="n">p_total</span><span class="p">,</span> <span class="n">p_minus</span> <span class="o">/</span> <span class="n">p_total</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_sum_of_leaves</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">train_data</span><span class="p">,</span> <span class="n">est_data</span><span class="p">):</span>
+        <span class="c1"># Helper function to compute the EMSE of the tree</span>
+
+        <span class="n">lower_bounds</span> <span class="o">=</span> <span class="p">(</span><span class="n">train_data</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">split_var_names</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">s_min</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">upper_bounds</span> <span class="o">=</span> <span class="p">(</span><span class="n">train_data</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">split_var_names</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">s_max</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        
+        <span class="c1"># If this node is a leaf, return its contribution to EMSE</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_leaf</span><span class="p">:</span>
+            <span class="n">d</span> <span class="o">=</span> <span class="n">train_data</span><span class="p">[</span><span class="n">lower_bounds</span> <span class="o">&amp;</span> <span class="n">upper_bounds</span><span class="p">]</span>
+            <span class="n">n_te</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">train_data</span><span class="p">)</span>
+            <span class="n">n_est</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">est_data</span><span class="p">)</span>
+            <span class="n">share_leaf</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">d</span><span class="p">)</span> <span class="o">/</span> <span class="n">n_te</span>
+            <span class="n">tau</span><span class="p">,</span> <span class="n">s1</span><span class="p">,</span> <span class="n">s2</span><span class="p">,</span> <span class="n">m1</span><span class="p">,</span> <span class="n">m2</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_sigma</span><span class="p">(</span><span class="n">d</span><span class="p">)</span>
+            <span class="n">p1</span><span class="p">,</span> <span class="n">p2</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_p</span><span class="p">(</span><span class="n">est_data</span><span class="p">)</span>
+            <span class="n">val</span> <span class="o">=</span> <span class="p">(</span><span class="n">s1</span><span class="o">*</span><span class="n">m1</span><span class="o">/</span><span class="n">p1</span> <span class="o">+</span> <span class="n">s2</span><span class="o">*</span><span class="n">m2</span><span class="o">/</span><span class="n">p2</span><span class="p">)</span><span class="o">*</span><span class="p">(</span><span class="mf">1.0</span><span class="o">/</span><span class="n">n_te</span> <span class="o">+</span> <span class="mf">1.0</span><span class="o">/</span><span class="n">n_est</span><span class="p">)</span>
+            <span class="n">val</span> <span class="o">-=</span> <span class="n">share_leaf</span><span class="o">*</span> <span class="p">(</span><span class="n">tau</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">val</span>
+        <span class="c1"># If not a leaf, sum the leaves of its children</span>
+        <span class="n">total</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">left</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">total</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">left</span><span class="o">.</span><span class="n">_sum_of_leaves</span><span class="p">(</span><span class="n">train_data</span><span class="p">,</span> <span class="n">est_data</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">right</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">total</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">right</span><span class="o">.</span><span class="n">_sum_of_leaves</span><span class="p">(</span><span class="n">train_data</span><span class="p">,</span> <span class="n">est_data</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">total</span>
+
+<div class="viewcode-block" id="CausalTree.print_tree">
+<a class="viewcode-back" href="../causal_ml.html#causal_ml.CausalTree.print_tree">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">print_tree</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Prints out all nodes of the tree along with some of their attributes. </span>
+<span class="sd">        Returns a list of the tree leaves if they have attribute ``tau_est``.</span>
+
+<span class="sd">        Will print all tree nodes, their depth, boundaries, and estimated treatment</span>
+<span class="sd">        effects. It will also return a list of leaves, if those leaves already have</span>
+<span class="sd">        an unbiased treatment estimate (``tau_est``) attached to it.</span>
+
+<span class="sd">        :return: Tree leaves with treatment effect, variance, and boundaries for each splitting variable</span>
+<span class="sd">        :rtype: list or None</span>
+
+<span class="sd">        &gt;&gt;&gt; my_tree.print_tree()</span>
+<span class="sd">        [[0.100, 0.050, [2.1, 2.9], [100, 167]],</span>
+<span class="sd">         [0.120, 0.081, [2.1, 2.9], [168, 250]]]</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">taus</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">get_taus</span><span class="p">(</span><span class="n">tr</span><span class="p">):</span>
+            <span class="n">borders</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">tr</span><span class="o">.</span><span class="n">s_min</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">tr</span><span class="o">.</span><span class="n">s_max</span><span class="o">.</span><span class="n">values</span><span class="p">))</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="k">nonlocal</span> <span class="n">taus</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;&#39;</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Depth: &#39;</span><span class="p">,</span> <span class="n">tr</span><span class="o">.</span><span class="n">depth</span><span class="p">)</span>
+            <span class="n">b_list</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="nb">id</span><span class="p">,</span> <span class="n">varname</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">split_var_names</span><span class="p">):</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Borders </span><span class="si">{</span><span class="n">varname</span><span class="si">}</span><span class="s1"> : &#39;</span><span class="p">,</span> <span class="nb">list</span><span class="p">(</span><span class="n">borders</span><span class="p">[:,</span> <span class="nb">id</span><span class="p">]))</span>
+                <span class="n">b_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">borders</span><span class="p">[:,</span> <span class="nb">id</span><span class="p">]))</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Treatment effect (biased): &#39;</span><span class="p">,</span> <span class="n">tr</span><span class="o">.</span><span class="n">tau</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">tr</span><span class="o">.</span><span class="n">is_leaf</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;This is a leaf.&#39;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">tr</span><span class="p">,</span> <span class="s1">&#39;tau_est&#39;</span><span class="p">):</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Treatment effect (unbiased):&#39;</span><span class="p">,</span> <span class="n">tr</span><span class="o">.</span><span class="n">tau_est</span><span class="p">)</span>
+                    <span class="n">taus</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="n">tr</span><span class="o">.</span><span class="n">tau_est</span><span class="p">,</span> <span class="n">tr</span><span class="o">.</span><span class="n">v_est</span><span class="p">]</span> <span class="o">+</span> <span class="n">b_list</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">tr</span><span class="o">.</span><span class="n">left</span><span class="p">:</span>
+                <span class="n">get_taus</span><span class="p">(</span><span class="n">tr</span><span class="o">.</span><span class="n">left</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">tr</span><span class="o">.</span><span class="n">right</span><span class="p">:</span>
+                <span class="n">get_taus</span><span class="p">(</span><span class="n">tr</span><span class="o">.</span><span class="n">right</span><span class="p">)</span>
+        <span class="n">get_taus</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">taus</span></div>
+
+    
+<div class="viewcode-block" id="CausalTree.estimate_tree">
+<a class="viewcode-back" href="../causal_ml.html#causal_ml.CausalTree.estimate_tree">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">estimate_tree</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Estimates unbiased treatment effects in the leaves </span>
+
+<span class="sd">        This method estimates the treatment effect in each leaf of the tree.  </span>
+<span class="sd">        If you use the estimation sample (as you should), then the treatment</span>
+<span class="sd">        effect estimates will be unbiased. These estimates are attached to </span>
+<span class="sd">        the tau_est attribute.</span>
+
+<span class="sd">        :param data: The estimation sample</span>
+<span class="sd">        :type data: pandas.DataFrame</span>
+
+<span class="sd">        &gt;&gt;&gt; my_tree.estimate_tree(data_estimation)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>                
+
+        <span class="n">est_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prep_data</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dep_var</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">run_var</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">split_var</span><span class="p">,</span> 
+                                   <span class="bp">self</span><span class="o">.</span><span class="n">indep_var</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">poly</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="p">)</span>
+            
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_leaf</span><span class="p">:</span>
+            <span class="n">lower_bounds</span> <span class="o">=</span> <span class="p">(</span><span class="n">est_data</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">split_var_names</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">s_min</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">upper_bounds</span> <span class="o">=</span> <span class="p">(</span><span class="n">est_data</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">split_var_names</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">s_max</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">est_data</span> <span class="o">=</span> <span class="n">est_data</span><span class="p">[</span><span class="n">lower_bounds</span> <span class="o">&amp;</span> <span class="n">upper_bounds</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">tau_est</span><span class="p">,</span> <span class="n">sigma_plus</span><span class="p">,</span> <span class="n">sigma_minus</span><span class="p">,</span> <span class="n">m_plus</span><span class="p">,</span> <span class="n">m_minus</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_sigma</span><span class="p">(</span><span class="n">est_data</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">v_est</span> <span class="o">=</span> <span class="n">sigma_plus</span><span class="o">*</span><span class="n">m_plus</span> <span class="o">+</span> <span class="n">sigma_minus</span><span class="o">*</span><span class="n">m_minus</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">left</span><span class="o">.</span><span class="n">estimate_tree</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">right</span><span class="o">.</span><span class="n">estimate_tree</span><span class="p">(</span><span class="n">data</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="CausalTree.prune_tree">
+<a class="viewcode-back" href="../causal_ml.html#causal_ml.CausalTree.prune_tree">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">prune_tree</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">train_data</span><span class="p">,</span> <span class="n">est_data</span><span class="p">,</span> <span class="n">cv_folds</span><span class="o">=</span><span class="mi">5</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Prune tree using complex-cost pruning</span>
+
+<span class="sd">        Uses k-fold cross-validation to prune the tree using complexity-cost pruning</span>
+
+<span class="sd">        :param train_data: The training sample</span>
+<span class="sd">        :type train_data: pandas.DataFrame</span>
+<span class="sd">        :param est_data: The estimation sample</span>
+<span class="sd">        :type est_data: pandas.DataFrame</span>
+<span class="sd">        :param cv_folds: Number of folds for cross-validation, defaults to 5</span>
+<span class="sd">        :type cv_folds: int, optional</span>
+
+<span class="sd">        :return: The pruned tree</span>
+<span class="sd">        :rtype: CausalTree</span>
+
+<span class="sd">        &gt;&gt;&gt; my_tree.prune_tree(data_training, data_estimation)</span>
+<span class="sd">        &lt;causal_ml.CausalTree at 0x1ff3c9984a0&gt;</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>        
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">_get_alphas</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="n">alphas</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">tree</span><span class="o">.</span><span class="n">delta_error</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">alphas</span><span class="p">:</span>
+                <span class="n">alphas</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">tree</span><span class="o">.</span><span class="n">delta_error</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">tree</span><span class="o">.</span><span class="n">is_leaf</span><span class="p">:</span>
+                <span class="n">alphas</span> <span class="o">=</span> <span class="n">_get_alphas</span><span class="p">(</span><span class="n">tree</span><span class="o">.</span><span class="n">left</span><span class="p">,</span> <span class="n">alphas</span><span class="p">)</span>
+                <span class="n">alphas</span> <span class="o">=</span> <span class="n">_get_alphas</span><span class="p">(</span><span class="n">tree</span><span class="o">.</span><span class="n">right</span><span class="p">,</span> <span class="n">alphas</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">alphas</span>
+    
+        <span class="k">def</span><span class="w"> </span><span class="nf">_make_folds</span><span class="p">():</span>
+            <span class="n">folds_tr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_train</span><span class="p">)</span> <span class="o">%</span> <span class="n">cv_folds</span>
+            <span class="n">folds_est</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_est</span><span class="p">)</span> <span class="o">%</span> <span class="n">cv_folds</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">shuffle</span><span class="p">(</span><span class="n">folds_tr</span><span class="p">)</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">shuffle</span><span class="p">(</span><span class="n">folds_est</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">folds_tr</span><span class="p">,</span> <span class="n">folds_est</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">_get_cv</span><span class="p">(</span><span class="n">alphas</span><span class="p">,</span> <span class="n">folds_tr</span><span class="p">,</span> <span class="n">folds_est</span><span class="p">):</span>
+            <span class="n">best_alpha</span> <span class="o">=</span> <span class="n">alphas</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">best_value</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">inf</span>
+            <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">alphas</span><span class="p">:</span>
+                <span class="n">cv_val</span> <span class="o">=</span> <span class="mf">0.0</span>
+                <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">cv_folds</span><span class="p">):</span>
+                    <span class="n">tree_f</span> <span class="o">=</span> <span class="n">CausalTree</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">depth</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_depth</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">split_steps</span><span class="p">,</span> 
+                        <span class="bp">self</span><span class="o">.</span><span class="n">min_leaf_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tol</span><span class="p">,</span> <span class="n">alpha</span> <span class="o">=</span> <span class="n">a</span><span class="p">)</span>
+                    <span class="n">selector_tr</span> <span class="o">=</span> <span class="n">folds_tr</span><span class="o">==</span><span class="n">f</span>
+                    <span class="n">selector_est</span> <span class="o">=</span> <span class="n">folds_est</span><span class="o">==</span><span class="n">f</span>
+                    <span class="n">tree_f</span><span class="o">.</span><span class="n">grow_tree</span><span class="p">(</span><span class="n">train_data</span><span class="p">[</span><span class="o">~</span><span class="n">selector_tr</span><span class="p">],</span> <span class="n">est_data</span><span class="p">[</span><span class="o">~</span><span class="n">selector_est</span><span class="p">],</span> 
+                                     <span class="bp">self</span><span class="o">.</span><span class="n">dep_var</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">run_var</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">split_var</span><span class="p">,</span> 
+                                     <span class="bp">self</span><span class="o">.</span><span class="n">indep_var</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">poly</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="p">)</span>
+                    <span class="n">cv_val</span> <span class="o">+=</span> <span class="n">tree_f</span><span class="o">.</span><span class="n">_sum_of_leaves</span><span class="p">(</span><span class="n">train_data</span><span class="p">[</span><span class="n">selector_tr</span><span class="p">],</span> 
+                                                    <span class="n">est_data</span><span class="p">[</span><span class="n">selector_est</span><span class="p">])</span>
+                <span class="k">if</span> <span class="n">cv_val</span> <span class="o">&lt;</span> <span class="n">best_value</span><span class="p">:</span>
+                    <span class="n">best_alpha</span> <span class="o">=</span> <span class="n">a</span>
+                    <span class="n">best_value</span> <span class="o">=</span> <span class="n">cv_val</span>
+            <span class="k">return</span> <span class="n">best_alpha</span>
+        <span class="n">train_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prep_data</span><span class="p">(</span><span class="n">train_data</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dep_var</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">run_var</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">split_var</span><span class="p">,</span>
+                                     <span class="bp">self</span><span class="o">.</span><span class="n">indep_var</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">poly</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="p">)</span>
+        <span class="n">est_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prep_data</span><span class="p">(</span><span class="n">est_data</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dep_var</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">run_var</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">split_var</span><span class="p">,</span>
+                                     <span class="bp">self</span><span class="o">.</span><span class="n">indep_var</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">poly</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="p">)</span>
+        <span class="n">alphas</span> <span class="o">=</span> <span class="n">_get_alphas</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="p">[])</span>
+        <span class="n">folds_tr</span><span class="p">,</span> <span class="n">folds_est</span> <span class="o">=</span> <span class="n">_make_folds</span><span class="p">()</span>
+        <span class="n">alpha_star</span> <span class="o">=</span> <span class="n">_get_cv</span><span class="p">(</span><span class="n">alphas</span><span class="p">,</span> <span class="n">folds_tr</span><span class="p">,</span> <span class="n">folds_est</span><span class="p">)</span>
+
+        <span class="n">tree_f</span> <span class="o">=</span> <span class="n">CausalTree</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">depth</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_depth</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">split_steps</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">min_leaf_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tol</span><span class="p">,</span> <span class="n">alpha</span> <span class="o">=</span> <span class="n">alpha_star</span><span class="p">)</span>
+        <span class="n">tree_f</span><span class="o">.</span><span class="n">grow_tree</span><span class="p">(</span><span class="n">train_data</span><span class="p">,</span> <span class="n">est_data</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dep_var</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">run_var</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">split_var</span><span class="p">,</span> 
+                         <span class="bp">self</span><span class="o">.</span><span class="n">indep_var</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">poly</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">tree_f</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Firat Yaman.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

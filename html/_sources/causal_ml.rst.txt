@@ -1,0 +1,7 @@
+causal\_ml module
+=================
+
+.. automodule:: causal_ml
+   :members:
+   :undoc-members:
+   :show-inheritance:

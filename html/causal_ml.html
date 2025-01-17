@@ -1,0 +1,285 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>causal_ml module &mdash; Heterogeneous Treatment Effects 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=8d563738"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="Heterogeneous Treatment Effects" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Heterogeneous Treatment Effects
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">causal_ml module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#usage-steps">Usage Steps:</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#example">Example:</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#causal_ml.CausalTree"><code class="docutils literal notranslate"><span class="pre">CausalTree</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#causal_ml.CausalTree.estimate_tree"><code class="docutils literal notranslate"><span class="pre">CausalTree.estimate_tree()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#causal_ml.CausalTree.grow_tree"><code class="docutils literal notranslate"><span class="pre">CausalTree.grow_tree()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#causal_ml.CausalTree.print_tree"><code class="docutils literal notranslate"><span class="pre">CausalTree.print_tree()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#causal_ml.CausalTree.prune_tree"><code class="docutils literal notranslate"><span class="pre">CausalTree.prune_tree()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Heterogeneous Treatment Effects</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">causal_ml module</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/causal_ml.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-causal_ml">
+<span id="causal-ml-module"></span><h1>causal_ml module<a class="headerlink" href="#module-causal_ml" title="Link to this heading"></a></h1>
+<p>This module only contains one class (CausalTree). It builds a causal tree based 
+on Reguly (2021). Treatment effects are local treatment effects based on a 
+regression discontinuity estimation within the leaves of the tree.</p>
+<section id="usage-steps">
+<h2>Usage Steps:<a class="headerlink" href="#usage-steps" title="Link to this heading"></a></h2>
+<ol class="arabic simple">
+<li><p>Download the <code class="docutils literal notranslate"><span class="pre">causal_ml</span></code> module into your working directory.</p></li>
+<li><p>Split your data into training and estimation samples.</p></li>
+<li><p>Create a <code class="docutils literal notranslate"><span class="pre">CausalTree</span></code> object.</p></li>
+<li><p>Grow the tree (both training and estimation samples are used in the process).</p></li>
+<li><p>Prune the tree.</p></li>
+<li><p>Estimate unbiased treatment effects with the estimation split.</p></li>
+<li><p>Print the tree and return the leaf information.</p></li>
+</ol>
+</section>
+<section id="example">
+<h2>Example:<a class="headerlink" href="#example" title="Link to this heading"></a></h2>
+<p>Your main script may look like this:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">causal_ml</span><span class="w"> </span><span class="kn">import</span> <span class="n">CausalTree</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.model_selection</span><span class="w"> </span><span class="kn">import</span> <span class="n">train_test_split</span>
+
+<span class="c1"># Load data</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">&#39;your_path_to_the_data&#39;</span><span class="p">)</span>
+
+<span class="c1"># Split data into training and estimation sets</span>
+<span class="n">d_train</span><span class="p">,</span> <span class="n">d_est</span> <span class="o">=</span> <span class="n">train_test_split</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">test_size</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span>
+
+<span class="c1"># Initialize CausalTree</span>
+<span class="n">tree</span> <span class="o">=</span> <span class="n">CausalTree</span><span class="p">(</span><span class="n">split_steps</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">max_depth</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">min_leaf_size</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+
+<span class="c1"># Grow the tree</span>
+<span class="n">tree</span><span class="o">.</span><span class="n">grow_tree</span><span class="p">(</span><span class="n">d_train</span><span class="p">,</span> <span class="n">d_est</span><span class="p">,</span> <span class="s1">&#39;wage&#39;</span><span class="p">,</span> <span class="s1">&#39;time&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;age&#39;</span><span class="p">:</span> <span class="s1">&#39;continuous&#39;</span><span class="p">,</span> <span class="s1">&#39;education&#39;</span><span class="p">:</span> <span class="s1">&#39;discrete&#39;</span><span class="p">})</span>
+
+<span class="c1"># Prune the tree</span>
+<span class="n">pruned_tree</span> <span class="o">=</span> <span class="n">tree</span><span class="o">.</span><span class="n">prune_tree</span><span class="p">(</span><span class="n">d_train</span><span class="p">,</span> <span class="n">d_est</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+
+<span class="c1"># Estimate treatment effects</span>
+<span class="n">pruned_tree</span><span class="o">.</span><span class="n">estimate_tree</span><span class="p">(</span><span class="n">d_est</span><span class="p">)</span>
+
+<span class="c1"># Print tree and retrieve leaf information</span>
+<span class="n">leaves</span> <span class="o">=</span> <span class="n">pruned_tree</span><span class="o">.</span><span class="n">print_tree</span><span class="p">()</span>
+</pre></div>
+</div>
+</section>
+<dl class="py class">
+<dt class="sig sig-object py" id="causal_ml.CausalTree">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">causal_ml.</span></span><span class="sig-name descname"><span class="pre">CausalTree</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">depth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_depth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">split_steps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_leaf_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">50</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tol</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.005</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/causal_ml.html#CausalTree"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#causal_ml.CausalTree" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>A class for building and pruning regression trees for heterogeneous treatment effects</p>
+<p>Treatment effects are estimated through Regression Discontinuity Design (RDD).
+See Reguly (2021) ‘Heterogeneous Treatment Effects in Regression Discontinuity Design’</p>
+<dl class="field-list simple">
+<dt class="field-odd">Variables<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>depth</strong> – The depth of this node from the source node</p></li>
+<li><p><strong>max_depth</strong> – The maximum permissible depth of the tree</p></li>
+<li><p><strong>is_leaf</strong> – Whether the node is a leaf</p></li>
+<li><p><strong>left</strong> – The node branching to the left</p></li>
+<li><p><strong>right</strong> – The node branching to the right</p></li>
+<li><p><strong>tau</strong> – The treatment effect in this node, estimated during training</p></li>
+<li><p><strong>tau_est</strong> – The treatment effect in this node, estimated on estimation sample</p></li>
+<li><p><strong>v</strong> – Variance of tau_est</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="causal_ml.CausalTree.estimate_tree">
+<span class="sig-name descname"><span class="pre">estimate_tree</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/causal_ml.html#CausalTree.estimate_tree"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#causal_ml.CausalTree.estimate_tree" title="Link to this definition"></a></dt>
+<dd><p>Estimates unbiased treatment effects in the leaves</p>
+<p>This method estimates the treatment effect in each leaf of the tree.  
+If you use the estimation sample (as you should), then the treatment
+effect estimates will be unbiased. These estimates are attached to 
+the tau_est attribute.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>data</strong> (<em>pandas.DataFrame</em>) – The estimation sample</p>
+</dd>
+</dl>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">my_tree</span><span class="o">.</span><span class="n">estimate_tree</span><span class="p">(</span><span class="n">data_estimation</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="causal_ml.CausalTree.grow_tree">
+<span class="sig-name descname"><span class="pre">grow_tree</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">train_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">est_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dep_var</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">run_var</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">split_var</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">indep_var</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">poly</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cutoff</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/causal_ml.html#CausalTree.grow_tree"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#causal_ml.CausalTree.grow_tree" title="Link to this definition"></a></dt>
+<dd><p>Grows the full tree</p>
+<p>Recursively splits the training sample until the maximum tree depth is reached, 
+or until there are no further information gains from growing the tree deeper</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>train_data</strong> (<em>pandas.DataFrame</em>) – The training sample</p></li>
+<li><p><strong>est_data</strong> (<em>pandas.DataFrame</em>) – The estimation sample</p></li>
+<li><p><strong>dep_var</strong> (<em>str</em>) – Name of the dependent variable</p></li>
+<li><p><strong>run_var</strong> (<em>str</em>) – Name of the running variable</p></li>
+<li><p><strong>split_var</strong> (<em>dict</em>) – Names of the splitting variables</p></li>
+<li><p><strong>indep_var</strong> (<em>list</em><em>, </em><em>optional</em>) – Names of the independent variables, defaults to []</p></li>
+<li><p><strong>poly</strong> (<em>int</em><em>, </em><em>optional</em>) – Polynomial order for running variable, defaults to 1</p></li>
+<li><p><strong>cutoff</strong> (<em>int</em><em>, </em><em>optional</em>) – Cutoff value for running variable, defaults to 0</p></li>
+</ul>
+</dd>
+</dl>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">my_tree</span><span class="o">.</span><span class="n">grow_tree</span><span class="p">(</span><span class="n">data_training</span><span class="p">,</span> <span class="n">data_estimation</span><span class="p">,</span> <span class="n">dep_var</span><span class="o">=</span><span class="s1">&#39;wage&#39;</span><span class="p">,</span> <span class="n">run_var</span><span class="o">=</span><span class="s1">&#39;time&#39;</span><span class="p">,</span> 
+<span class="go">                    split_var={&#39;age&#39;:&#39;continuous&#39;, &#39;education&#39;=&#39;discrete&#39;})</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>For <strong>run_var</strong>, pass each variable as a key-value pair where 
+key is the variable name (str) and value is 
+either ‘discrete’ or ‘continuous’ (str).</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="causal_ml.CausalTree.print_tree">
+<span class="sig-name descname"><span class="pre">print_tree</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/causal_ml.html#CausalTree.print_tree"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#causal_ml.CausalTree.print_tree" title="Link to this definition"></a></dt>
+<dd><p>Prints out all nodes of the tree along with some of their attributes. 
+Returns a list of the tree leaves if they have attribute <code class="docutils literal notranslate"><span class="pre">tau_est</span></code>.</p>
+<p>Will print all tree nodes, their depth, boundaries, and estimated treatment
+effects. It will also return a list of leaves, if those leaves already have
+an unbiased treatment estimate (<code class="docutils literal notranslate"><span class="pre">tau_est</span></code>) attached to it.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Tree leaves with treatment effect, variance, and boundaries for each splitting variable</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>list or None</p>
+</dd>
+</dl>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">my_tree</span><span class="o">.</span><span class="n">print_tree</span><span class="p">()</span>
+<span class="go">[[0.100, 0.050, [2.1, 2.9], [100, 167]],</span>
+<span class="go"> [0.120, 0.081, [2.1, 2.9], [168, 250]]]</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="causal_ml.CausalTree.prune_tree">
+<span class="sig-name descname"><span class="pre">prune_tree</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">train_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">est_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cv_folds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/causal_ml.html#CausalTree.prune_tree"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#causal_ml.CausalTree.prune_tree" title="Link to this definition"></a></dt>
+<dd><p>Prune tree using complex-cost pruning</p>
+<p>Uses k-fold cross-validation to prune the tree using complexity-cost pruning</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>train_data</strong> (<em>pandas.DataFrame</em>) – The training sample</p></li>
+<li><p><strong>est_data</strong> (<em>pandas.DataFrame</em>) – The estimation sample</p></li>
+<li><p><strong>cv_folds</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of folds for cross-validation, defaults to 5</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The pruned tree</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#causal_ml.CausalTree" title="causal_ml.CausalTree">CausalTree</a></p>
+</dd>
+</dl>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">my_tree</span><span class="o">.</span><span class="n">prune_tree</span><span class="p">(</span><span class="n">data_training</span><span class="p">,</span> <span class="n">data_estimation</span><span class="p">)</span>
+<span class="go">&lt;causal_ml.CausalTree at 0x1ff3c9984a0&gt;</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="index.html" class="btn btn-neutral float-left" title="Heterogeneous Treatment Effects" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Firat Yaman.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
